@@ -1,4 +1,4 @@
-# booking/views.py - FIXED VERSION
+
 from rest_framework import generics, status
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
@@ -80,7 +80,7 @@ class BookingDetailView(generics.RetrieveAPIView):
     def get_object(self):
         booking = super().get_object()
         
-        # Check permission
+        
         user = self.request.user
         if booking.renter != user and booking.venue.owner != user and not user.is_staff:
             self.permission_denied(self.request, 'You do not have permission to view this booking')
@@ -96,21 +96,21 @@ class CancelBookingView(generics.UpdateAPIView):
     def update(self, request, *args, **kwargs):
         booking = self.get_object()
         
-        # Check permission
+      
         if booking.renter != request.user:
             return Response(
                 {'error': 'Only the renter can cancel this booking'},
                 status=status.HTTP_403_FORBIDDEN
             )
         
-        # Check if booking can be cancelled
+       
         if booking.status in ['COMPLETED', 'CANCELLED', 'REJECTED']:
             return Response(
                 {'error': 'Cannot cancel this booking'},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # Check cancellation policy
+        
         time_to_start = booking.start_date - timezone.now().date()
         if time_to_start.days < 1 and booking.status == 'CONFIRMED':
             return Response(
@@ -118,7 +118,7 @@ class CancelBookingView(generics.UpdateAPIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # Update booking
+       
         booking.status = 'CANCELLED'
         booking.rejection_reason = request.data.get('reason', 'Cancelled by renter')
         booking.save()
@@ -152,13 +152,11 @@ class CalculatePriceView(generics.GenericAPIView):
                 status=status.HTTP_404_NOT_FOUND
             )
         
-        # Calculate days
         from datetime import datetime
         start = datetime.strptime(start_date, '%Y-%m-%d').date()
         end = datetime.strptime(end_date, '%Y-%m-%d').date()
         days = (end - start).days + 1
         
-        # Calculate pricing
         subtotal = venue.price_per_day * days
         commission = subtotal * (venue.commission_percentage / 100)
         deposit = subtotal * (venue.deposit_percentage / 100)
