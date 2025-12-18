@@ -39,7 +39,7 @@ INSTALLED_APPS = [
     # Third-party apps
     'rest_framework',
     'django_filters',
-    
+     'corsheaders',
     # Local apps
     'users',
     'venues',
@@ -57,6 +57,7 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
+     "corsheaders.middleware.CorsMiddleware",
 ]
 
 ROOT_URLCONF = 'config.urls'
@@ -141,3 +142,5 @@ EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
+
+CORS_ALLOW_ALL_ORIGINS = True
