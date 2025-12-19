@@ -74,16 +74,6 @@ class BookingCreateSerializer(serializers.Serializer):
             **validated_data
         )
         
-        from notifications.models import Notification
-        Notification.objects.create(
-            user=venue.owner,
-            type='NEW_BOOKING',
-            message=f"New booking request for {venue.name} from {booking.renter.first_name}",
-            link=f"/vendor/bookings/{booking.id}"
-        )
-        
-        return booking
-
 
 class BookingDetailSerializer(serializers.ModelSerializer):
     venue = serializers.SerializerMethodField()

@@ -74,25 +74,14 @@ class BookingViewSet(viewsets.ModelViewSet):
             booking.status = 'CONFIRMED'
             booking.confirmed_at = timezone.now()
             
-            from notifications.models import Notification
-            Notification.objects.create(
-                user=booking.renter,
-                type='BOOKING_CONFIRMED',
-                message=f"Your booking at {booking.venue.name} has been confirmed!",
-                link=f"/renter/bookings/{booking.id}"
-            )
+           
         
         elif new_status == 'REJECTED':
             booking.status = 'REJECTED'
             booking.rejection_reason = rejection_reason
             
-            from notifications.models import Notification
-            Notification.objects.create(
-                user=booking.renter,
-                type='BOOKING_REJECTED',
-                message=f"Your booking at {booking.venue.name} was rejected",
-                link=f"/renter/bookings/{booking.id}"
-            )
+            
+               
         
         elif new_status == 'COMPLETED':
             booking.status = 'COMPLETED'
@@ -128,16 +117,7 @@ class BookingViewSet(viewsets.ModelViewSet):
         booking.rejection_reason = request.data.get('reason', 'Cancelled by renter')
         booking.save()
         
-        from notifications.models import Notification
-        Notification.objects.create(
-            user=booking.venue.owner,
-            type='BOOKING_CANCELLED',
-            message=f"Booking {booking.booking_reference} was cancelled by the renter",
-            link=f"/vendor/bookings/{booking.id}"
-        )
         
-        return Response({'message': 'Booking cancelled successfully'})
-
 
 @api_view(['GET'])
 def vendor_dashboard(request):
