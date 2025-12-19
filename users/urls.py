@@ -1,18 +1,18 @@
 from django.urls import path
-from .views import (
-    UserRegistrationView,
-    UserLoginView,
-    UserLogoutView,
-    UserProfileView,
-    UserListView,
-    ChangePasswordView
-)
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from . import views
 
 urlpatterns = [
-    path('register/', UserRegistrationView.as_view(), name='register'),
-    path('login/', UserLoginView.as_view(), name='login'),
-    path('logout/', UserLogoutView.as_view(), name='logout'),
-    path('profile/', UserProfileView.as_view(), name='profile'),
-    path('users/', UserListView.as_view(), name='user-list'),
-    path('change-password/', ChangePasswordView.as_view(), name='change-password'),
+    # Authentication
+    path('auth/register/', views.register, name='register'),
+    path('auth/login/', TokenObtainPairView.as_view(), name='login'),
+    path('auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    
+    # User Profile
+    path('users/me/', views.profile, name='profile'),
+    
+    # Favorites
+    path('users/favorites/', views.add_favorite, name='add_favorite'),
+    path('users/favorites/list/', views.get_favorites, name='get_favorites'),
+    path('users/favorites/<int:venue_id>/', views.remove_favorite, name='remove_favorite'),
 ]

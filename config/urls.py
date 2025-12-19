@@ -15,12 +15,8 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 """URL configuration for VenueBooking project."""
-from django.contrib import admin
-from django.urls import path, include
-from django.conf import settings
-from django.conf.urls.static import static
 
-"""URL configuration for VenueBooking project."""
+
 from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
@@ -28,9 +24,11 @@ from django.conf.urls.static import static
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('api/', include('api.urls')),  # Only include API URLs for now
+    path('api/', include('users.urls')),
+    path('api/', include('venues.urls')),
+    path('api/', include('booking.urls')),
+    
 ]
 
-# Serve media files in development
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

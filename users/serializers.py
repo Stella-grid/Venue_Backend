@@ -1,41 +1,51 @@
 from rest_framework import serializers
-from django.contrib.auth import get_user_model
-from django.contrib.auth.password_validation import validate_password
-
-User = get_user_model()
+from .models import User, Favorite
 
 class UserRegistrationSerializer(serializers.ModelSerializer):
-    password = serializers.CharField(write_only=True, required=True, validators=[validate_password])
-    password2 = serializers.CharField(write_only=True, required=True)
-
+    password = serializers.CharField(write_only=True, min_length=6)
+    password_confirm = serializers.CharField(write_only=True, min_length=6)
+    
     class Meta:
         model = User
-        fields = ['email', 'first_name', 'last_name', 'phone', 'role', 'password', 'password2']
-        extra_kwargs = {
-            'email': {'required': True},
-            'first_name': {'required': True},
-            'last_name': {'required': True},
-        }
-
-    def validate(self, attrs):
-        if attrs['password'] != attrs['password2']:
-            raise serializers.ValidationError({"password": "Password fields didn't match."})
-        return attrs
-
+        fields = ['email', 'password', 'password_confirm', 'first_name', 'last_name', 'phone', 'role', 'username']
+    
+    def validate(self, data):
+        if data['password'] != data['password_confirm']:
+            raise serializers.ValidationError({"password": "Passwords do not match"})
+        
+        if not data.get('username'):
+            data['username'] = data['email'].split('@')[0]
+        
+        return data
+    
     def create(self, validated_data):
-        validated_data.pop('password2')
-        user = User.objects.create_user(**validated_data)
+        validated_data.pop('password_confirm')
+        password = validated_data.pop('password')
+        
+        user = User.objects.create(**validated_data)
+        user.set_password(password)
+        user.save()
+        
         return user
 
-class UserProfileSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = User
-        fields = ['id', 'email', 'first_name', 'last_name', 'phone', 'role', 
-                  'profile_picture', 'date_of_birth', 'address', 'company_name', 
-                  'tax_id', 'date_joined']
-        read_only_fields = ['id', 'email', 'date_joined']
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ['id', 'email', 'first_name', 'last_name', 'phone', 'role']
+        fields = ['id', 'email', 'first_name', 'last_name', 'phone', 'role', 'created_at']
+        read_only_fields = ['id', 'created_at']
+
+
+class UserUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ['first_name', 'last_name', 'phone']
+
+
+class FavoriteSerializer(serializers.ModelSerializer):
+    venue_name = serializers.CharField(source='venue.name', read_only=True)
+    
+    class Meta:
+        model = Favorite
+        fields = ['id', 'venue', 'venue_name', 'created_at']
+        read_only_fields = ['id', 'created_at']

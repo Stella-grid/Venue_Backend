@@ -1,17 +1,22 @@
 
-from rest_framework import generics, status
+from rest_framework import viewsets, status
+from rest_framework.decorators import api_view, action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from django_filters.rest_framework import DjangoFilterBackend
 from django.utils import timezone
-from django.db.models import Q
+from django.db.models import Sum, Q
 from .models import Booking
-from .serializers import BookingSerializer, BookingListSerializer, BookingDetailSerializer
-from venues.models import Venue
+from .serializers import (
+    BookingCreateSerializer,
+    BookingDetailSerializer,
+    BookingListSerializer,
+)
 
-class UserBookingsView(generics.ListAPIView):
-    """Get all bookings for current user"""
-    serializer_class = BookingListSerializer
+class BookingViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ['status', 'event_type']
     
     def get_queryset(self):
         user = self.request.user
@@ -22,163 +27,170 @@ class UserBookingsView(generics.ListAPIView):
             return Booking.objects.filter(venue__owner=user).select_related('venue', 'renter')
         
         return Booking.objects.none()
-
-class UpcomingBookingsView(generics.ListAPIView):
-    """Get upcoming bookings for current user"""
-    serializer_class = BookingListSerializer
-    permission_classes = [IsAuthenticated]
     
-    def get_queryset(self):
-        user = self.request.user
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return BookingCreateSerializer
+        elif self.action == 'list':
+            return BookingListSerializer
+        return BookingDetailSerializer
+    
+    @action(detail=False, methods=['get'])
+    def my_bookings(self, request):
+        bookings = self.get_queryset()
         today = timezone.now().date()
         
-        if user.role == 'RENTER':
-            return Booking.objects.filter(
-                renter=user,
-                start_date__gte=today,
-                status__in=['PENDING', 'CONFIRMED']
-            ).select_related('venue', 'renter')
-        elif user.role == 'VENDOR':
-            return Booking.objects.filter(
-                venue__owner=user,
-                start_date__gte=today,
-                status__in=['PENDING', 'CONFIRMED']
-            ).select_related('venue', 'renter')
+        upcoming = bookings.filter(
+            start_date__gte=today,
+            status__in=['PENDING', 'CONFIRMED']
+        )
+        past = bookings.filter(
+            Q(end_date__lt=today) | Q(status='COMPLETED')
+        )
+        pending = bookings.filter(status='PENDING')
+        cancelled = bookings.filter(status='CANCELLED')
         
-        return Booking.objects.none()
-
-class PastBookingsView(generics.ListAPIView):
-    """Get past bookings for current user"""
-    serializer_class = BookingListSerializer
-    permission_classes = [IsAuthenticated]
+        return Response({
+            'upcoming': BookingListSerializer(upcoming, many=True).data,
+            'past': BookingListSerializer(past, many=True).data,
+            'pending': BookingListSerializer(pending, many=True).data,
+            'cancelled': BookingListSerializer(cancelled, many=True).data
+        })
     
-    def get_queryset(self):
-        user = self.request.user
-        today = timezone.now().date()
-        
-        if user.role == 'RENTER':
-            return Booking.objects.filter(
-                renter=user
-            ).filter(
-                Q(end_date__lt=today) | Q(status='COMPLETED')
-            ).select_related('venue', 'renter')
-        elif user.role == 'VENDOR':
-            return Booking.objects.filter(
-                venue__owner=user
-            ).filter(
-                Q(end_date__lt=today) | Q(status='COMPLETED')
-            ).select_related('venue', 'renter')
-        
-        return Booking.objects.none()
-
-class BookingDetailView(generics.RetrieveAPIView):
-    """Get detailed booking information"""
-    queryset = Booking.objects.all()
-    serializer_class = BookingDetailSerializer
-    permission_classes = [IsAuthenticated]
-    
-    def get_object(self):
-        booking = super().get_object()
-        
-        
-        user = self.request.user
-        if booking.renter != user and booking.venue.owner != user and not user.is_staff:
-            self.permission_denied(self.request, 'You do not have permission to view this booking')
-        
-        return booking
-
-class CancelBookingView(generics.UpdateAPIView):
-    """Cancel a booking"""
-    queryset = Booking.objects.all()
-    serializer_class = BookingSerializer
-    permission_classes = [IsAuthenticated]
-    
-    def update(self, request, *args, **kwargs):
+    @action(detail=True, methods=['patch'])
+    def update_status(self, request, pk=None):
         booking = self.get_object()
         
-      
-        if booking.renter != request.user:
+        if booking.venue.owner != request.user:
             return Response(
-                {'error': 'Only the renter can cancel this booking'},
+                {'error': 'Only venue owner can update booking status'}, 
                 status=status.HTTP_403_FORBIDDEN
             )
         
-       
-        if booking.status in ['COMPLETED', 'CANCELLED', 'REJECTED']:
+        new_status = request.data.get('status')
+        rejection_reason = request.data.get('rejection_reason', '')
+        
+        if new_status == 'CONFIRMED':
+            booking.status = 'CONFIRMED'
+            booking.confirmed_at = timezone.now()
+            
+            from notifications.models import Notification
+            Notification.objects.create(
+                user=booking.renter,
+                type='BOOKING_CONFIRMED',
+                message=f"Your booking at {booking.venue.name} has been confirmed!",
+                link=f"/renter/bookings/{booking.id}"
+            )
+        
+        elif new_status == 'REJECTED':
+            booking.status = 'REJECTED'
+            booking.rejection_reason = rejection_reason
+            
+            from notifications.models import Notification
+            Notification.objects.create(
+                user=booking.renter,
+                type='BOOKING_REJECTED',
+                message=f"Your booking at {booking.venue.name} was rejected",
+                link=f"/renter/bookings/{booking.id}"
+            )
+        
+        elif new_status == 'COMPLETED':
+            booking.status = 'COMPLETED'
+            booking.completed_at = timezone.now()
+        
+        else:
             return Response(
-                {'error': 'Cannot cancel this booking'},
+                {'error': 'Invalid status'}, 
                 status=status.HTTP_400_BAD_REQUEST
             )
         
+        booking.save()
         
-        time_to_start = booking.start_date - timezone.now().date()
-        if time_to_start.days < 1 and booking.status == 'CONFIRMED':
+        return Response(BookingDetailSerializer(booking, context={'request': request}).data)
+    
+    @action(detail=True, methods=['post'])
+    def cancel(self, request, pk=None):
+        booking = self.get_object()
+        
+        if booking.renter != request.user:
             return Response(
-                {'error': 'Cannot cancel within 24 hours of start date'},
+                {'error': 'Only the renter can cancel this booking'}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        if booking.status in ['COMPLETED', 'CANCELLED']:
+            return Response(
+                {'error': 'Cannot cancel this booking'}, 
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-       
         booking.status = 'CANCELLED'
         booking.rejection_reason = request.data.get('reason', 'Cancelled by renter')
         booking.save()
         
-        serializer = self.get_serializer(booking)
-        return Response({
-            'message': 'Booking cancelled successfully',
-            'booking': serializer.data
-        })
+        from notifications.models import Notification
+        Notification.objects.create(
+            user=booking.venue.owner,
+            type='BOOKING_CANCELLED',
+            message=f"Booking {booking.booking_reference} was cancelled by the renter",
+            link=f"/vendor/bookings/{booking.id}"
+        )
+        
+        return Response({'message': 'Booking cancelled successfully'})
 
-class CalculatePriceView(generics.GenericAPIView):
-    """Calculate price for a booking"""
-    permission_classes = [IsAuthenticated]
+
+@api_view(['GET'])
+def vendor_dashboard(request):
+    if request.user.role != 'VENDOR':
+        return Response(
+            {'error': 'Only vendors can access this endpoint'}, 
+            status=status.HTTP_403_FORBIDDEN
+        )
     
-    def post(self, request):
-        venue_id = request.data.get('venue_id')
-        start_date = request.data.get('start_date')
-        end_date = request.data.get('end_date')
-        
-        if not all([venue_id, start_date, end_date]):
-            return Response(
-                {'error': 'venue_id, start_date, and end_date are required'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        try:
-            venue = Venue.objects.get(id=venue_id, is_active=True)
-        except Venue.DoesNotExist:
-            return Response(
-                {'error': 'Venue not found or not available'},
-                status=status.HTTP_404_NOT_FOUND
-            )
-        
-        from datetime import datetime
-        start = datetime.strptime(start_date, '%Y-%m-%d').date()
-        end = datetime.strptime(end_date, '%Y-%m-%d').date()
-        days = (end - start).days + 1
-        
-        subtotal = venue.price_per_day * days
-        commission = subtotal * (venue.commission_percentage / 100)
-        deposit = subtotal * (venue.deposit_percentage / 100)
-        total = subtotal + commission
-        
-        return Response({
-            'venue': {
-                'id': venue.id,
-                'name': venue.name,
-                'city': venue.city
-            },
-            'dates': {
-                'start_date': start_date,
-                'end_date': end_date,
-                'days': days
-            },
-            'pricing': {
-                'price_per_day': float(venue.price_per_day),
-                'subtotal': float(subtotal),
-                'commission': float(commission),
-                'deposit_percentage': float(venue.deposit_percentage),
-                'deposit_amount': float(deposit),
-                'total': float(total)
-            }
-        })
+    from venues.models import Venue
+    
+    venues = Venue.objects.filter(owner=request.user)
+    bookings = Booking.objects.filter(venue__owner=request.user)
+    
+    this_month_start = timezone.now().replace(day=1).date()
+    this_month_bookings = bookings.filter(
+        created_at__gte=this_month_start,
+        status='COMPLETED'
+    )
+    
+    total_earnings = bookings.filter(status='COMPLETED').aggregate(
+        total=Sum('subtotal')
+    )['total'] or 0
+    
+    this_month_earnings = this_month_bookings.aggregate(
+        total=Sum('subtotal')
+    )['total'] or 0
+    
+    pending_bookings = bookings.filter(status='PENDING').count()
+    total_bookings = bookings.count()
+    
+    recent_bookings = bookings.order_by('-created_at')[:5]
+    
+    return Response({
+        'total_earnings': float(total_earnings),
+        'this_month_earnings': float(this_month_earnings),
+        'pending_bookings': pending_bookings,
+        'total_bookings': total_bookings,
+        'total_venues': venues.count(),
+        'recent_bookings': BookingListSerializer(recent_bookings, many=True).data
+    })
+
+
+@api_view(['GET'])
+def vendor_bookings(request):
+    if request.user.role != 'VENDOR':
+        return Response(
+            {'error': 'Only vendors can access this endpoint'}, 
+            status=status.HTTP_403_FORBIDDEN
+        )
+    
+    bookings = Booking.objects.filter(venue__owner=request.user).select_related('venue', 'renter')
+    
+    return Response({
+        'pending': BookingListSerializer(
+            bookings.filter(status='PENDING'), many=True) })
