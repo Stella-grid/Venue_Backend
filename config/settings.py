@@ -140,5 +140,5 @@ SIMPLE_JWT = {
 CORS_ALLOWED_ORIGINS = config(
     'CORS_ALLOWED_ORIGINS',
     default='http://localhost:3000,http://localhost:5173'
-    'https://camevent-hub-frontend-3qxp.vercel.app/',).split(',')
+    'https://camevent-hub-frontend-3qxp.vercel.app/ https://venue-backend-3.onrender.com',).split(',')
 CORS_ALLOW_CREDENTIALS = True
