@@ -18,8 +18,8 @@ from decouple import config
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = config('SECRET_KEY', default='django-insecure-change-this-in-production')
-DEBUG = config('DEBUG', default=True, cast=bool)
+SECRET_KEY = 'django-insecure-change-this-in-production')
+DEBUG = False
 
 ALLOWED_HOSTS = ['*']
 
