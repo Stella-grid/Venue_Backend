@@ -143,6 +143,15 @@ CORS_ALLOWED_ORIGINS = [
     "https://camevent-hub-frontend-3qxp.vercel.app ", 
       
 ] 
+
+CORS_ALLOW_HEADERS = [
+    "accept",
+    "authorization",
+    "content-type",
+    "user-agent",
+    "x-csrftoken",
+    "x-requested-with",
+]
         # optional for local testing
 
 # CORS Settings
