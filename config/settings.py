@@ -143,7 +143,7 @@ SIMPLE_JWT = {
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
    "http://localhost:3000","http://localhost:5173",
-    "https://camevent-hub-frontend-e48d.vercel.app", 
+    "https://camevent-hub-frontend-4i7j.vercel.app", 
       
 ] 
 
